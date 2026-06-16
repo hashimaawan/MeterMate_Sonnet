@@ -103,6 +103,57 @@ export async function createSubscription(params: {
   };
 }
 
+// ── UC2: recordUsage ──────────────────────────────────────────────────────────
+
+export interface UsageResult {
+  usageId: number;
+  componentHandle: string;
+  quantity: number;
+  unitBalance: number;
+  memo?: string;
+  recordedAt: string;
+}
+
+const UNIT_NAMES: Record<string, string> = {
+  'metermate-consulting-minutes': 'minute',
+  'metermate-api-calls': 'call',
+};
+
+export async function recordUsage(params: {
+  subscriptionId: number;
+  componentHandle: string;
+  quantity: number;
+  memo?: string;
+}): Promise<UsageResult> {
+  const { subscriptionId, componentHandle, quantity, memo } = params;
+
+  // component_id accepts 'handle:<handle>' — no separate lookup needed
+  const { result } = await subscriptionComponentsController.createUsage(
+    subscriptionId,
+    `handle:${componentHandle}`,
+    {
+      usage: {
+        quantity,
+        ...(memo ? { memo } : {}),
+      },
+    }
+  );
+
+  const usage = result.usage;
+  if (!usage?.id) throw new Error('Maxio returned no usage id');
+
+  return {
+    usageId: Number(usage.id),
+    componentHandle: usage.componentHandle ?? componentHandle,
+    quantity: Number(usage.quantity ?? quantity),
+    unitBalance: Number(usage.unitBalance ?? 0),
+    memo: usage.memo ?? undefined,
+    recordedAt: usage.createdAt ?? new Date().toISOString(),
+  };
+}
+
+export { UNIT_NAMES };
+
 // ── UC2 stub (implemented in UC2 slice) ───────────────────────────────────────
 export { subscriptionComponentsController };
 

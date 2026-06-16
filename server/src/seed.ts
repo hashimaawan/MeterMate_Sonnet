@@ -6,11 +6,14 @@
  * Creates on the Maxio test site:
  *   - Product Family: metermate-consulting
  *   - Products: basic ($99/mo), pro ($299/mo)
- *   - Metered Components: consulting-minutes ($2.00/min), api-calls ($0.01/call)
+ *   - Metered Components: metermate-consulting-minutes ($2.00/min), metermate-api-calls ($0.01/call)
  *
- * Note on api-calls: Maxio Event-Based Billing (EBB) requires a billing metric
+ * Handles are prefixed with "metermate-" to avoid collisions on shared Maxio test sites
+ * where generic names like "consulting-minutes" may belong to another product family.
+ *
+ * Note on metermate-api-calls: Maxio Event-Based Billing (EBB) requires a billing metric
  * pre-created via the Maxio UI and site-level EBB enablement. This seed creates
- * api-calls as a standard metered (per-unit) component, which achieves the same
+ * metermate-api-calls as a standard metered (per-unit) component, which achieves the same
  * per-unit billing with zero UI pre-setup. Usage recording via createUsage is
  * identical for both component types.
  */
@@ -184,8 +187,8 @@ export async function runSeed(): Promise<SeedResult> {
 
   console.log('\n[seed] Components...');
   const [consultingMinutes, apiCalls] = await Promise.all([
-    ensureMeteredComponent(familyId, 'consulting-minutes', 'Consulting Minutes', 'minute', '2.00'),
-    ensureMeteredComponent(familyId, 'api-calls', 'API Calls', 'call', '0.01'),
+    ensureMeteredComponent(familyId, 'metermate-consulting-minutes', 'MeterMate Consulting Minutes', 'minute', '2.00'),
+    ensureMeteredComponent(familyId, 'metermate-api-calls', 'MeterMate API Calls', 'call', '0.01'),
   ]);
 
   console.log('\n[seed] Consultants (from env):');

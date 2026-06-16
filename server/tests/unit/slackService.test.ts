@@ -281,13 +281,13 @@ describe('Block Kit builders', () => {
 
   it('buildUsageRecordedBlocks includes component and quantity', () => {
     const blocks = buildUsageRecordedBlocks({
-      component: 'consulting-minutes',
+      component: 'metermate-consulting-minutes',
       quantity: 30,
       periodTotal: 90,
       unitName: 'minute',
     });
     const json = JSON.stringify(blocks);
-    expect(json).toContain('consulting-minutes');
+    expect(json).toContain('metermate-consulting-minutes');
     expect(json).toContain('30');
   });
 
