@@ -9,6 +9,7 @@ import { sessionStore } from './stores/sessionStore';
 import { transactionStore } from './stores/transactionStore';
 import metaRouter, { setCachedProducts, setSlackHealthy } from './routes/meta';
 import { runSeed } from './seed';
+import { checkSlackHealth } from './services/slackService';
 import bookRouter from './routes/book';
 import usageRouter from './routes/usage';
 import planChangeRouter from './routes/planChange';
@@ -69,8 +70,10 @@ setInterval(() => {
 
 // ── Boot sequence ─────────────────────────────────────────────────────────────
 async function boot(): Promise<void> {
-  // Slack health — wired in Phase 2
-  setSlackHealthy(false);
+  // Slack health check
+  const slackOk = await checkSlackHealth();
+  setSlackHealthy(slackOk);
+  console.log(`[MeterMate] Slack: ${slackOk ? 'ok' : 'FAILED — check SLACK_BOT_TOKEN and scopes'}`);
 
   // Maxio seed + product cache
   if (config.demoMode) {
