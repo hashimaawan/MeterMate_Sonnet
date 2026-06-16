@@ -342,7 +342,95 @@ export async function applyPlanChange(params: {
 // ── UC3 stub ──────────────────────────────────────────────────────────────────
 export { subscriptionProductsController };
 
-// ── UC4 stub (implemented in UC4 slice) ───────────────────────────────────────
+// ── UC4 types ─────────────────────────────────────────────────────────────────
+
+export interface LifecycleResult {
+  subscriptionId: number;
+  action: string;
+  oldState: string;
+  newState: string;
+  effectiveDate: string;
+  maxioUrl: string;
+}
+
+// ── UC4: performLifecycle ─────────────────────────────────────────────────────
+
+export async function performLifecycle(params: {
+  subscriptionId: number;
+  action: 'pause' | 'resume' | 'cancel' | 'reactivate';
+  cancelType?: 'immediate' | 'end-of-period';
+  reasonCode?: string;
+}): Promise<LifecycleResult> {
+  const { subscriptionId, action, cancelType, reasonCode } = params;
+
+  // Read current state before the operation
+  const { result: beforeResult } = await subscriptionsController.readSubscription(subscriptionId);
+  const oldState = (beforeResult.subscription?.state as string | undefined) ?? 'unknown';
+
+  let newState: string;
+
+  switch (action) {
+    case 'pause': {
+      const { result } = await subscriptionStatusController.pauseSubscription(subscriptionId, {});
+      newState = (result.subscription?.state as string | undefined) ?? 'on_hold';
+      break;
+    }
+
+    case 'resume': {
+      const { result } = await subscriptionStatusController.resumeSubscription(subscriptionId);
+      newState = (result.subscription?.state as string | undefined) ?? 'active';
+      break;
+    }
+
+    case 'cancel': {
+      if (cancelType === 'end-of-period') {
+        await subscriptionStatusController.initiateDelayedCancellation(subscriptionId, {
+          subscription: {
+            ...(reasonCode ? { cancellationMessage: reasonCode, reasonCode } : {}),
+          },
+        });
+        // Subscription stays active but is scheduled to cancel — read back to confirm
+        const { result } = await subscriptionsController.readSubscription(subscriptionId);
+        newState =
+          (result.subscription?.cancelAtEndOfPeriod as boolean | undefined)
+            ? 'active (cancels at period end)'
+            : (result.subscription?.state as string | undefined) ?? 'active';
+      } else {
+        // immediate
+        const { result } = await subscriptionStatusController.cancelSubscription(
+          subscriptionId,
+          {
+            subscription: {
+              ...(reasonCode ? { cancellationMessage: reasonCode, reasonCode } : {}),
+            },
+          }
+        );
+        newState = (result.subscription?.state as string | undefined) ?? 'canceled';
+      }
+      break;
+    }
+
+    case 'reactivate': {
+      const { result } = await subscriptionStatusController.reactivateSubscription(
+        subscriptionId,
+        {}
+      );
+      newState = (result.subscription?.state as string | undefined) ?? 'active';
+      break;
+    }
+  }
+
+  return {
+    subscriptionId,
+    action,
+    oldState,
+    newState,
+    effectiveDate: formatDate(new Date().toISOString()),
+    maxioUrl: maxioSubscriptionUrl(subscriptionId),
+  };
+}
+
+// ── UC4 stub ──────────────────────────────────────────────────────────────────
 export { subscriptionStatusController };
 
 // ── UC5 stub (implemented in UC5 slice) ───────────────────────────────────────
