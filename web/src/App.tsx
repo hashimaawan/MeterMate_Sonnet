@@ -3,14 +3,16 @@ import BookForm from './components/BookForm';
 import UsageForm from './components/UsageForm';
 import PlanChangeForm from './components/PlanChangeForm';
 import LifecycleForm from './components/LifecycleForm';
+import InvoicesForm from './components/InvoicesForm';
 
-type Tab = 'book' | 'usage' | 'plan-change' | 'lifecycle';
+type Tab = 'book' | 'usage' | 'plan-change' | 'lifecycle' | 'invoices';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'book', label: 'Book & Subscribe' },
   { id: 'usage', label: 'Record Usage' },
   { id: 'plan-change', label: 'Plan Change' },
   { id: 'lifecycle', label: 'Lifecycle' },
+  { id: 'invoices', label: 'Invoice' },
 ];
 
 export default function App() {
@@ -80,6 +82,7 @@ export default function App() {
         {activeTab === 'usage' && <UsageForm defaultTxnRef={lastTxnId} />}
         {activeTab === 'plan-change' && <PlanChangeForm defaultTxnRef={lastTxnId} />}
         {activeTab === 'lifecycle' && <LifecycleForm defaultTxnRef={lastTxnId} />}
+        {activeTab === 'invoices' && <InvoicesForm defaultTxnRef={lastTxnId} />}
       </div>
     </div>
   );
