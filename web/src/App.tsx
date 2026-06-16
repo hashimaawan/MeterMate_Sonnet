@@ -2,13 +2,15 @@ import { useState } from 'react';
 import BookForm from './components/BookForm';
 import UsageForm from './components/UsageForm';
 import PlanChangeForm from './components/PlanChangeForm';
+import LifecycleForm from './components/LifecycleForm';
 
-type Tab = 'book' | 'usage' | 'plan-change';
+type Tab = 'book' | 'usage' | 'plan-change' | 'lifecycle';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'book', label: 'Book & Subscribe' },
   { id: 'usage', label: 'Record Usage' },
   { id: 'plan-change', label: 'Plan Change' },
+  { id: 'lifecycle', label: 'Lifecycle' },
 ];
 
 export default function App() {
@@ -77,6 +79,7 @@ export default function App() {
         {activeTab === 'book' && <BookForm onBooked={handleBooked} />}
         {activeTab === 'usage' && <UsageForm defaultTxnRef={lastTxnId} />}
         {activeTab === 'plan-change' && <PlanChangeForm defaultTxnRef={lastTxnId} />}
+        {activeTab === 'lifecycle' && <LifecycleForm defaultTxnRef={lastTxnId} />}
       </div>
     </div>
   );
