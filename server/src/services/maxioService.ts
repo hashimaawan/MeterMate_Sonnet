@@ -18,6 +18,8 @@ import {
   SubscriptionState,
   InvoiceStatus,
   FailedPaymentAction,
+  SubscriptionStateFilter,
+  SubscriptionDateField,
 } from '@maxio-com/advanced-billing-sdk';
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -508,6 +510,77 @@ export async function issueAndSendInvoice(params: {
 
 // ── UC5 stub (implemented in UC5 slice) ───────────────────────────────────────
 export { invoicesController };
+
+// ── UC6 types ─────────────────────────────────────────────────────────────────
+
+export interface DigestResult {
+  consultantId: string;
+  activeCount: number;
+  mrr: string;
+  newSignups: number;
+  churn: number;
+  overdueInvoices: number;
+  windowDays: number;
+}
+
+// ── UC6: fetchDigest ──────────────────────────────────────────────────────────
+
+export async function fetchDigest(params: {
+  consultantId: string;
+}): Promise<DigestResult> {
+  const windowDays = 30;
+  const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .split('T')[0];
+
+  // Run all four Maxio calls concurrently; treat each as non-fatal so a
+  // single API hiccup doesn't kill the whole digest.
+  const [statsR, mrrR, newSubsR, canceledSubsR] = await Promise.allSettled([
+    insightsController.readSiteStats(),
+    insightsController.readMrr(), // deprecated but still the simplest MRR endpoint
+    subscriptionsController.listSubscriptions({
+      state: SubscriptionStateFilter.Active,
+      dateField: SubscriptionDateField.CreatedAt,
+      startDate: since,
+      perPage: 200,
+    }),
+    subscriptionsController.listSubscriptions({
+      state: SubscriptionStateFilter.Canceled,
+      dateField: SubscriptionDateField.CanceledAt,
+      startDate: since,
+      perPage: 200,
+    }),
+  ]);
+
+  const stats = statsR.status === 'fulfilled' ? statsR.value.result.stats : undefined;
+  const mrr = mrrR.status === 'fulfilled' ? mrrR.value.result.mrr : undefined;
+  const newSubs = newSubsR.status === 'fulfilled' ? newSubsR.value.result : [];
+  const canceledSubs = canceledSubsR.status === 'fulfilled' ? canceledSubsR.value.result : [];
+
+  const activeCount = stats?.totalActiveSubscriptions ?? 0;
+  const overdueInvoices = stats?.totalPastDueSubscriptions ?? 0;
+  const newSignups = newSubs.length;
+  const churn = canceledSubs.length;
+
+  let mrrDisplay: string;
+  if (mrr?.amountFormatted != null) {
+    mrrDisplay = `${mrr.currencySymbol ?? '$'}${mrr.amountFormatted}`;
+  } else if (mrr?.amountInCents != null) {
+    mrrDisplay = centsToDisplay(mrr.amountInCents);
+  } else {
+    mrrDisplay = '$0.00';
+  }
+
+  return {
+    consultantId: params.consultantId,
+    activeCount,
+    mrr: mrrDisplay,
+    newSignups,
+    churn,
+    overdueInvoices,
+    windowDays,
+  };
+}
 
 // ── UC6 stub (implemented in UC6 slice) ───────────────────────────────────────
 export { insightsController, eventsController };
