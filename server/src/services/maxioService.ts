@@ -175,10 +175,171 @@ export async function recordUsage(params: {
 
 export { UNIT_NAMES };
 
-// ── UC2 stub (implemented in UC2 slice) ───────────────────────────────────────
-export { subscriptionComponentsController };
+// ── UC3 types ─────────────────────────────────────────────────────────────────
 
-// ── UC3 stub (implemented in UC3 slice) ───────────────────────────────────────
+export interface PlanChangePreviewResult {
+  currentPlan: string;
+  currentPlanHandle: string;
+  targetPlan: string;
+  timing: 'prorate' | 'at-renewal';
+  paymentDueInCents: number;
+  creditAppliedInCents: number;
+  proratedDisplay: string;
+  effectiveDate: string;
+}
+
+export interface PlanChangeResult {
+  subscriptionId: number;
+  oldPlan: string;
+  newPlan: string;
+  timing: 'prorate' | 'at-renewal';
+  effectiveDate: string;
+  proration: string;
+  mrr?: string;
+  maxioUrl: string;
+}
+
+// ── UC3: previewPlanChange ────────────────────────────────────────────────────
+
+export async function previewPlanChange(params: {
+  subscriptionId: number;
+  targetHandle: string;
+  timing: 'prorate' | 'at-renewal';
+}): Promise<PlanChangePreviewResult> {
+  const { subscriptionId, targetHandle, timing } = params;
+
+  // Read current subscription for current plan info
+  const { result: subResult } = await subscriptionsController.readSubscription(subscriptionId);
+  const sub = subResult.subscription;
+  const currentPlanHandle = (sub?.product?.handle as string | undefined) ?? 'unknown';
+  const currentPlan = (sub?.product?.name as string | undefined) ?? currentPlanHandle;
+  const targetPlan = targetHandle === 'basic' ? 'Basic Plan' : 'Pro Plan';
+
+  if (timing === 'prorate') {
+    const { result: previewResult } =
+      await subscriptionProductsController.previewSubscriptionProductMigration(
+        subscriptionId,
+        {
+          migration: {
+            productHandle: targetHandle,
+            preservePeriod: true,
+            includeCoupons: true,
+          },
+        }
+      );
+
+    const migration = previewResult.migration;
+    const paymentDueInCents = Number(migration?.paymentDueInCents ?? 0);
+    const creditAppliedInCents = Number(migration?.creditAppliedInCents ?? 0);
+
+    let proratedDisplay: string;
+    if (paymentDueInCents > 0) {
+      proratedDisplay = `${centsToDisplay(paymentDueInCents)} due now`;
+    } else if (creditAppliedInCents > 0) {
+      proratedDisplay = `${centsToDisplay(creditAppliedInCents)} credit applied`;
+    } else {
+      proratedDisplay = '$0.00';
+    }
+
+    return {
+      currentPlan,
+      currentPlanHandle,
+      targetPlan,
+      timing,
+      paymentDueInCents,
+      creditAppliedInCents,
+      proratedDisplay,
+      effectiveDate: formatDate(new Date().toISOString()),
+    };
+  } else {
+    // at-renewal: no immediate charge
+    const nextBillDate = formatDate(
+      (sub?.nextAssessmentAt as string | undefined) ?? null
+    );
+    return {
+      currentPlan,
+      currentPlanHandle,
+      targetPlan,
+      timing,
+      paymentDueInCents: 0,
+      creditAppliedInCents: 0,
+      proratedDisplay: '$0.00 now — full price at renewal',
+      effectiveDate: nextBillDate,
+    };
+  }
+}
+
+// ── UC3: applyPlanChange ──────────────────────────────────────────────────────
+
+export async function applyPlanChange(params: {
+  subscriptionId: number;
+  targetHandle: string;
+  timing: 'prorate' | 'at-renewal';
+}): Promise<PlanChangeResult> {
+  const { subscriptionId, targetHandle, timing } = params;
+
+  // Read current plan before change
+  const { result: subResult } = await subscriptionsController.readSubscription(subscriptionId);
+  const oldPlan =
+    (subResult.subscription?.product?.name as string | undefined) ?? 'unknown';
+  const targetPlan = targetHandle === 'basic' ? 'Basic Plan' : 'Pro Plan';
+
+  if (timing === 'prorate') {
+    const { result: migResult } =
+      await subscriptionProductsController.migrateSubscriptionProduct(
+        subscriptionId,
+        {
+          migration: {
+            productHandle: targetHandle,
+            preservePeriod: true,
+            includeCoupons: true,
+          },
+        }
+      );
+
+    const updatedSub = migResult.subscription;
+    return {
+      subscriptionId: Number(updatedSub?.id ?? subscriptionId),
+      oldPlan,
+      newPlan: (updatedSub?.product?.name as string | undefined) ?? targetPlan,
+      timing,
+      effectiveDate: formatDate(new Date().toISOString()),
+      proration: `Prorated — ${centsToDisplay(updatedSub?.productPriceInCents)} / mo`,
+      mrr: centsToDisplay(updatedSub?.productPriceInCents),
+      maxioUrl: maxioSubscriptionUrl(subscriptionId),
+    };
+  } else {
+    // at-renewal: schedule delayed product change (no proration)
+    const { result: updResult } = await subscriptionsController.updateSubscription(
+      subscriptionId,
+      {
+        subscription: {
+          productHandle: targetHandle,
+          productChangeDelayed: true,
+        },
+      }
+    );
+
+    const updatedSub = updResult.subscription;
+    const effectiveDate = formatDate(
+      (updatedSub?.currentPeriodEndsAt as string | undefined) ??
+        (updatedSub?.nextAssessmentAt as string | undefined) ??
+        null
+    );
+
+    return {
+      subscriptionId: Number(updatedSub?.id ?? subscriptionId),
+      oldPlan,
+      newPlan: targetPlan,
+      timing,
+      effectiveDate,
+      proration: 'No immediate charge — takes effect at renewal',
+      maxioUrl: maxioSubscriptionUrl(subscriptionId),
+    };
+  }
+}
+
+// ── UC3 stub ──────────────────────────────────────────────────────────────────
 export { subscriptionProductsController };
 
 // ── UC4 stub (implemented in UC4 slice) ───────────────────────────────────────
