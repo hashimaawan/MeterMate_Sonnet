@@ -127,10 +127,12 @@ export async function recordUsage(params: {
 }): Promise<UsageResult> {
   const { subscriptionId, componentHandle, quantity, memo } = params;
 
-  // component_id accepts 'handle:<handle>' — no separate lookup needed
+  const componentId = `handle:${componentHandle}`;
+
+  // Record the usage
   const { result } = await subscriptionComponentsController.createUsage(
     subscriptionId,
-    `handle:${componentHandle}`,
+    componentId,
     {
       usage: {
         quantity,
@@ -142,11 +144,30 @@ export async function recordUsage(params: {
   const usage = result.usage;
   if (!usage?.id) throw new Error('Maxio returned no usage id');
 
+  // unit_balance is listed in the createUsage spec but not reliably returned
+  // by the live API. Sum listUsages for the definitive period total instead.
+  let periodTotal = quantity;
+  try {
+    const { result: usageList } = await subscriptionComponentsController.listUsages({
+      subscriptionIdOrReference: subscriptionId,
+      componentId,
+      perPage: 200,
+    });
+    if (Array.isArray(usageList) && usageList.length > 0) {
+      periodTotal = usageList.reduce(
+        (sum, item) => sum + Number(item.usage?.quantity ?? 0),
+        0
+      );
+    }
+  } catch {
+    // listUsages failure is non-fatal — fall back to the just-recorded quantity
+  }
+
   return {
     usageId: Number(usage.id),
     componentHandle: usage.componentHandle ?? componentHandle,
     quantity: Number(usage.quantity ?? quantity),
-    unitBalance: Number(usage.unitBalance ?? 0),
+    unitBalance: periodTotal,
     memo: usage.memo ?? undefined,
     recordedAt: usage.createdAt ?? new Date().toISOString(),
   };

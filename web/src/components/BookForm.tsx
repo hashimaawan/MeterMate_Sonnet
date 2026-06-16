@@ -198,7 +198,11 @@ const DEFAULT_FORM: FormState = {
   couponCode: '',
 };
 
-export default function BookForm() {
+interface Props {
+  onBooked?: (txnId: string) => void;
+}
+
+export default function BookForm({ onBooked }: Props) {
   const sessionId = useRef(crypto.randomUUID());
   const formId = useId();
 
@@ -253,6 +257,7 @@ export default function BookForm() {
         setFieldErrors(res.details);
       }
       if (res.status === 'ok') {
+        onBooked?.(res.txnId);
         setForm(DEFAULT_FORM);
         sessionId.current = crypto.randomUUID();
       }
