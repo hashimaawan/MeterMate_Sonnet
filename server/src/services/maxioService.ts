@@ -16,6 +16,8 @@ import { config } from '../config';
 import {
   CollectionMethod,
   SubscriptionState,
+  InvoiceStatus,
+  FailedPaymentAction,
 } from '@maxio-com/advanced-billing-sdk';
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -432,6 +434,77 @@ export async function performLifecycle(params: {
 
 // ── UC4 stub ──────────────────────────────────────────────────────────────────
 export { subscriptionStatusController };
+
+// ── UC5 types ─────────────────────────────────────────────────────────────────
+
+export interface InvoiceResult {
+  invoiceUid: string;
+  invoiceNumber: string;
+  status: string;
+  amountDue: string;
+  dueDate: string;
+  publicUrl: string;
+  wasIssued: boolean;
+  maxioUrl: string;
+}
+
+// ── UC5: issueAndSendInvoice ──────────────────────────────────────────────────
+
+export async function issueAndSendInvoice(params: {
+  subscriptionId: number;
+}): Promise<InvoiceResult> {
+  const { subscriptionId } = params;
+
+  // Step 1: look for a pending invoice to issue
+  const { result: pendingList } = await invoicesController.listInvoices({
+    subscriptionId,
+    status: InvoiceStatus.Pending,
+    perPage: 5,
+  });
+
+  let invoice = pendingList.invoices?.[0];
+  let wasIssued = false;
+
+  if (invoice?.uid) {
+    // Issue the pending invoice → moves to open (or paid on automatic collection)
+    const { result: issued } = await invoicesController.issueInvoice(invoice.uid, {
+      onFailedPayment: FailedPaymentAction.LeaveOpenInvoice,
+    });
+    invoice = issued;
+    wasIssued = true;
+  } else {
+    // No pending — find the most recent open invoice
+    const { result: openList } = await invoicesController.listInvoices({
+      subscriptionId,
+      status: InvoiceStatus.Open,
+      perPage: 5,
+    });
+    invoice = openList.invoices?.[0];
+  }
+
+  if (!invoice?.uid) {
+    throw new Error(
+      'No pending or open invoice found for this subscription. ' +
+      'Record some usage or wait for the next billing cycle.'
+    );
+  }
+
+  // Step 2: send the invoice via email (queues delivery to customer's default email)
+  await invoicesController.sendInvoice(invoice.uid, {});
+
+  const publicUrl = (invoice.publicUrl as string | undefined) ?? maxioSubscriptionUrl(subscriptionId);
+
+  return {
+    invoiceUid: invoice.uid,
+    invoiceNumber: (invoice.number as string | undefined) ?? invoice.uid,
+    status: (invoice.status as string | undefined) ?? 'open',
+    amountDue: (invoice.dueAmount as string | undefined) ?? '0.00',
+    dueDate: formatDate((invoice.dueDate as string | undefined) ?? null),
+    publicUrl,
+    wasIssued,
+    maxioUrl: maxioSubscriptionUrl(subscriptionId),
+  };
+}
 
 // ── UC5 stub (implemented in UC5 slice) ───────────────────────────────────────
 export { invoicesController };
