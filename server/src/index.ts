@@ -8,6 +8,7 @@ import { config } from './config';
 import { sessionStore } from './stores/sessionStore';
 import { transactionStore } from './stores/transactionStore';
 import metaRouter, { setCachedProducts, setSlackHealthy } from './routes/meta';
+import { runSeed } from './seed';
 import bookRouter from './routes/book';
 import usageRouter from './routes/usage';
 import planChangeRouter from './routes/planChange';
@@ -68,10 +69,28 @@ setInterval(() => {
 
 // ── Boot sequence ─────────────────────────────────────────────────────────────
 async function boot(): Promise<void> {
-  // Phase 1 will wire up Maxio + Slack health checks here.
-  // For Phase 0, we mark Slack as unchecked and products as empty.
+  // Slack health — wired in Phase 2
   setSlackHealthy(false);
-  setCachedProducts([]);
+
+  // Maxio seed + product cache
+  if (config.demoMode) {
+    try {
+      const seedResult = await runSeed();
+      setCachedProducts(
+        seedResult.products.map((p) => ({
+          handle: p.handle,
+          name: p.name,
+          price: p.priceInCents / 100,
+          interval: p.intervalUnit,
+        }))
+      );
+    } catch (err) {
+      console.error('[boot] Seed failed — products cache empty:', (err as Error).message);
+      setCachedProducts([]);
+    }
+  } else {
+    setCachedProducts([]);
+  }
 
   app.listen(config.port, () => {
     console.log(`[MeterMate] Server listening on http://localhost:${config.port}`);
